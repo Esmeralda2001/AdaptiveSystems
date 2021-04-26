@@ -25,6 +25,6 @@ class Agent:
             self.previous_position = self.position
             #print(list(actions.keys()))
             action = random.choice(list(actions.keys()))
-            print("Moving ", action, " instead")
+            #print("Moving ", action, " instead")
             new_pos = tuple(np.add(self.position, actions[action]))
             return new_pos 

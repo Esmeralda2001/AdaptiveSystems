@@ -18,8 +18,8 @@ class Agent:
 
         if rand_val <= chosen_prob:
             self.previous_position = self.position
-            new_pos = tuple(np.add(self.position, actions[action]))
-            return new_pos 
+            new_pos = tuple(np.add(self.position, actions[action])) 
+            return new_pos, action 
         else:
             del actions[action]
             self.previous_position = self.position
@@ -27,4 +27,4 @@ class Agent:
             action = random.choice(list(actions.keys()))
             #print("Moving ", action, " instead")
             new_pos = tuple(np.add(self.position, actions[action]))
-            return new_pos 
+            return new_pos, action

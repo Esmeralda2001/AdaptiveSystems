@@ -3,7 +3,8 @@ import random
 import operator
 from StateReturns import StateReturns
 from Agent import Agent
-from QTable import QTable
+from QAS import QAS
+import pandas as pd
 
 class Grid:
     def __init__(self, width, height, terminal, start, y=1, prob=.7):
@@ -17,8 +18,7 @@ class Grid:
         self.prob = prob
         self.y = y
         self.states = {}
-        self.Q = {}
-        # Holds the maximum Q values. Used for debugging. 
+        self.Q = {} 
         self.Q_max_values = np.zeros((self.width+1, self.height+1), dtype=float)
     
     def set(self, rewards):
@@ -65,7 +65,7 @@ class Grid:
         """
         self.grid = np.zeros((self.width+1, self.height+1), dtype=int)
         self.values = np.copy(self.grid).astype(float)
-        self.policy = np.array(["X" for _ in range(height * width)]).reshape(width, height)  
+        self.policy = np.array(["X" for _ in range((self.height+1) * (self.width+1))]).reshape(self.width+1, self.height+1)  
         self.states = {}
         self.Q = {}
         # Holds the maximum Q values. Used for debugging. 
@@ -177,20 +177,37 @@ class Grid:
                 new_state = StateReturns(x, y, self.rewards[x][y])
                 self.states[str(x)+","+str(y)] = new_state
     
-    def make_QTable(self):
+    def make_QAS(self):
         actions = ["^", ">", "<", "V"]
         for x in range(len(self.policy)):
             for y in range(len(self.policy[x])):
                 new_state = StateReturns(x, y, self.rewards[x][y])
                 if [x, y] in self.terminal:
                     self.states[str(x)+","+str(y)] = new_state 
-                    new_qtable = QTable(new_state, "X")
+                    new_qtable = QAS(new_state, "X")
                     self.Q[str(x)+","+str(y)+","+"X"] = new_qtable
                     continue 
                 for action in actions:
                     self.states[str(x)+","+str(y)] = new_state 
-                    new_qtable = QTable(new_state, action)
+                    new_qtable = QAS(new_state, action)
                     self.Q[str(x)+","+str(y)+","+action] = new_qtable
+     
+    def make_QTable(self):
+        QTable = {}
+        for s in self.states:
+            x, y = self.states[s].x, self.states[s].y
+            if [x, y] in self.terminal:
+                continue 
+            state_and_actions = {"^":self.Q[s+",^"].Q, "V":self.Q[s+",V"].Q, ">":self.Q[s+",>"].Q, "<":self.Q[s+",<"].Q}
+            QTable[s] = state_and_actions
+            self.policy[x][y] = max(state_and_actions.items(), key=operator.itemgetter(1))[0]
+        print("Policy: ")
+        print(self.policy)
+        print()
+        print("QTable: ")
+        return pd.DataFrame(QTable)
+
+        
 
 #--------------------------------------------# ALGORITHMS (ASSIGNMENT 1) #--------------------------------------------#  
     def value_iteration(self):
@@ -317,9 +334,8 @@ class Grid:
                 current_state.returns.append(G)
 
                 # update value 
-                print(sum(current_state.returns)/len(current_state.returns))
                 self.values[current_state.x][current_state.y] = sum(current_state.returns)/len(current_state.returns)
-            print(self.values, "iteration= "+str(i))
+        print(self.values, "iteration= "+str(i))
 
 
     def td_learning(self, rand=True, a=.1):
@@ -340,7 +356,7 @@ class Grid:
         self.make_states()
 
         #loop for each episode 
-        for i in range(1000):
+        for i in range(10000):
             t = -1
 
             # Initialize state
@@ -363,8 +379,6 @@ class Grid:
 
                 # Observe R
                 reward = next_state.reward
-                if reward > 0:
-                    print(reward)
                 current_state_value = state.value
                 next_state_value = next_state.value 
 
@@ -375,7 +389,7 @@ class Grid:
                 # Initialize next state
                 state = next_state
 
-            print(self.values, "iteration= "+str(i))
+        print(self.values, "iteration= "+str(i))
 
 
     def mc_control(self, rand=True, e=0.05):
@@ -388,7 +402,7 @@ class Grid:
         """
         print("starting mc_control")
         self.values = np.zeros((self.width+1, self.height+1), dtype=float)
-        Q_max_values = np.zeros((self.width+1, self.height+1), dtype=float)
+        self.Q_max_values = np.zeros((self.width+1, self.height+1), dtype=float)
         actions = ["^", ">", "<", "V"]
 
         # initialize policy
@@ -396,7 +410,7 @@ class Grid:
             self.random_policy()
 
         # Q(s,a) in R (arbitrarily) for all s in S, a in A(s)
-        self.make_QTable()
+        self.make_QAS()
 
         # repeat 'forever' 
         for i in range(10000):
@@ -447,8 +461,8 @@ class Grid:
                 else:
                     self.policy[xpos][ypos] = A
                     self.Q_max_values[xpos][ypos] = state_and_actions[A]
-            print(self.Q_max_values)
-            print(self.policy, "iteration= "+str(i))
+        return self.make_QTable()
+        #print(self.policy, "iteration= "+str(i))
   
     
     def sarsa(self, rand=True, a=0.1, e=0.1):
@@ -462,16 +476,18 @@ class Grid:
         :type a: float
         :type e: float
         """
-
+        self.values = np.zeros((self.width+1, self.height+1), dtype=float)
+        self.Q_max_values = np.zeros((self.width+1, self.height+1), dtype=float)
+        
         # Initialize policy
         if rand:
             self.random_policy()
 
         # Q(s,a) in R (arbitrarily) for all s in S, a in A(s)
-        self.make_QTable()
+        self.make_QAS()
 
         # Loop for each episode 
-        for i in range(1000):
+        for i in range(10000):
             t = -1
             # Initialize S
             start_state = self.get_random_state()
@@ -511,9 +527,8 @@ class Grid:
                 # Until S is terminal
                 if [self.states[state].x, self.states[state].y] in self.terminal:
                     break
-            print(self.Q_max_values)
-            print(self.policy) 
-            #print(Q_vals)
+        return self.make_QTable() 
+            
     
     def sarsa_max(self, rand=True, a=0.1, e=0.1):
         """
@@ -526,6 +541,9 @@ class Grid:
         :type a: float
         :type e: float
         """
+        self.values = np.zeros((self.width+1, self.height+1), dtype=float)
+        self.Q_max_values = np.zeros((self.width+1, self.height+1), dtype=float)
+        
         actions = ["^", ">", "<", "V"]
 
         # initialize policy
@@ -534,23 +552,23 @@ class Grid:
 
 
         # Q(s,a) in R (arbitrarily) for all s in S, a in A(s)
-        self.make_QTable()
+        self.make_QAS()
 
         # Loop for each episode 
         for i in range(10000):
             t = -1
-            print("start loop")
+            
             # Initialize S
             start_state = self.get_random_state()
             agent = Agent(start_state)
-            print("Initialized S")
+            
             # Initialize S
             state = str(start_state[0])+","+str(start_state[1])
             
             # Loop for each step of episode
             while True:
                 t += 1
-                print(self.states[state].x, self.states[state].y)
+                
                 # Choose A from S
                 if [self.states[state].x, self.states[state].y] in self.terminal:
                     break 
@@ -579,6 +597,5 @@ class Grid:
                 # Until S is terminal
                 if [self.states[state].x, self.states[state].y] in self.terminal:
                     break
-            print(self.Q_max_values)
-            print(self.policy, "iteration=", t)
+        return self.make_QTable()
         
